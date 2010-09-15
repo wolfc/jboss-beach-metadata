@@ -492,6 +492,13 @@ public class Generator
       return normalize(Character.toUpperCase(s.charAt(0)) + s.substring(1));
    }
 
+   public static void main(String args[]) throws IOException
+   {
+      String xsdFiles[] = new String[args.length - 2];
+      System.arraycopy(args, 2, xsdFiles, 0, xsdFiles.length);
+      Generator.generate(args[0], args[1], xsdFiles);
+   }
+
    private static String normalize(String s)
    {
       String result = "";

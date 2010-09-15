@@ -19,22 +19,64 @@
       A day at the beach with JavaEE metadata.
    </description>
 
-   <!--
    <build>
+      <!-- ahem -->
+      <sourceDirectory>target/generated-sources/generator</sourceDirectory>
       <plugins>
          <plugin>
-            <groupId>org.jvnet.jaxb2.maven2</groupId>
-            <artifactId>maven-jaxb2-plugin</artifactId>
-            <version>0.7.4</version>
+            <groupId>org.codehaus.mojo</groupId>
+            <artifactId>exec-maven-plugin</artifactId>
+            <version>1.1.1</version>
             <executions>
                <execution>
                   <goals>
-                     <goal>generate</goal>
+                     <goal>java</goal>
                   </goals>
+                  <phase>generate-sources</phase>
                </execution>
             </executions>
+            <configuration>
+               <mainClass>org.jboss.beach.metadata.generator.Generator</mainClass>
+               <!-- this is the only scope which is not exposed -->
+               <classpathScope>test</classpathScope>
+               <arguments>
+                  <argument>${project.basedir}/target/generated-sources/generator</argument>
+                  <argument>org.jboss.beach.metadata.javaee</argument>
+                  <argument>${project.basedir}/src/main/resources/javaee_web_services_client_1_3.xsd</argument>
+                  <argument>${project.basedir}/src/main/resources/javaee_6.xsd</argument>
+               </arguments>
+            </configuration>
          </plugin>
+         <!-- mega obscure maven magic, this will not add the source to the sources artifact -->
+         <!--
+         <plugin>
+            <groupId>org.codehaus.mojo</groupId>
+            <artifactId>build-helper-maven-plugin</artifactId>
+            <version>1.5</version>
+            <executions>
+               <execution>
+                  <goals>
+                     <goal>add-source</goal>
+                  </goals>
+                  <phase>generate-sources</phase>
+               </execution>
+            </executions>
+            <configuration>
+               <sources>
+                  <source>target/generated-sources/generator</source>
+               </sources>
+            </configuration>
+         </plugin>
+         -->
       </plugins>
    </build>
-   -->
+
+   <dependencies>
+      <dependency>
+         <groupId>${project.groupId}</groupId>
+         <artifactId>jboss-beach-metadata-generator</artifactId>
+         <version>${project.version}</version>
+         <scope>test</scope>
+      </dependency>
+   </dependencies>
 </project>

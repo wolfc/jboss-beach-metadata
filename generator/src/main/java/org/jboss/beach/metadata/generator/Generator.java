@@ -24,6 +24,7 @@ package org.jboss.beach.metadata.generator;
 import org.jboss.beach.metadata.generator.xsd.Annotated;
 import org.jboss.beach.metadata.generator.xsd.Attribute;
 import org.jboss.beach.metadata.generator.xsd.ComplexType;
+import org.jboss.beach.metadata.generator.xsd.Documentation;
 import org.jboss.beach.metadata.generator.xsd.Element;
 import org.jboss.beach.metadata.generator.xsd.Facet;
 import org.jboss.beach.metadata.generator.xsd.Group;
@@ -64,13 +65,15 @@ public class Generator
    private static class Property
    {
       final String name;
+      final String comment;
       final String type;
 
-      Property(String name, String type)
+      Property(String name, String comment, String type)
       {
          assert name != null : "name is null";
 
          this.name = name;
+         this.comment = comment;
          this.type = type;
       }
    }
@@ -122,7 +125,7 @@ public class Generator
       }
    }
 
-   private String comma(List<String> list)
+   private static String comma(List<String> list)
    {
       String s = "";
       for(int i = 0; i < list.size(); i++)
@@ -132,6 +135,29 @@ public class Generator
             s += ", ";
       }
       return s;
+   }
+
+   /**
+    * Create nice Java comment.
+    */
+   private static String comment(String s)
+   {
+      return comment("", s);
+   }
+
+   private static String comment(String prepend, String s)
+   {
+      if(s == null)
+         return null;
+
+      String r = prepend + "/**\n";
+      StringTokenizer st = new StringTokenizer(s, "\n");
+      while(st.hasMoreTokens())
+      {
+         r += prepend + " * " + st.nextToken().trim() + "\n";
+      }
+      r += prepend + " */";
+      return r;
    }
 
    private String determineJavaType(String name, SimpleContent content)
@@ -231,6 +257,14 @@ public class Generator
       throw new RuntimeException("NYI " + name);
    }
 
+   private static String documentation(Annotated annotated)
+   {
+      if(annotated.getAnnotation() == null)
+         return null;
+      Documentation doc = (Documentation) annotated.getAnnotation().getAppinfoOrDocumentation().get(0);
+      return (String) doc.getContent().get(0);
+   }
+
    public void generate() throws IOException
    {
       for(Schema schema : generateSchemas)
@@ -240,7 +274,7 @@ public class Generator
             if(attrs instanceof NamedGroup)
             {
                NamedGroup group = (NamedGroup) attrs;
-               generateInterface(group.getName(), group);
+               generateInterface(group.getName(), documentation(group), group);
             }
             else if(attrs instanceof TopLevelComplexType)
             {
@@ -257,9 +291,9 @@ public class Generator
                   continue;
                }
                if(type.getSimpleContent() != null)
-                  generateInterface(type.getName(), type.getSimpleContent());
+                  generateInterface(type.getName(), documentation(type), type.getSimpleContent());
                else
-                  generateInterface(type.getName(), type.getSequence());
+                  generateInterface(type.getName(), documentation(type), type.getSequence());
             }
             else if(attrs instanceof TopLevelSimpleType)
             {
@@ -273,7 +307,7 @@ public class Generator
       }
    }
    
-   private void generateInterface(String name, Group group) throws IOException
+   private void generateInterface(String name, String documentation, Group group) throws IOException
    {
       assert group != null : "group is null on " + name;
 
@@ -298,7 +332,7 @@ public class Generator
                   String type = determineJavaType(element.getType());
                   if(isCollection)
                      type = "java.util.List<" + type + ">";
-                  properties.add(new Property(element.getName(), type));
+                  properties.add(new Property(element.getName(), comment("   ", documentation(element)), type));
                }
                else if(v2 instanceof GroupRef)
                {
@@ -318,7 +352,7 @@ public class Generator
             String type = determineJavaType(element.getType());
             if(isCollection)
                type = "java.util.List<" + type + ">";
-            properties.add(new Property(element.getName(), type));
+            properties.add(new Property(element.getName(), comment("   ", documentation(element)), type));
          }
          else
             throw new IllegalStateException(value.toString());
@@ -330,11 +364,15 @@ public class Generator
 
       out.println("package " + packageName + ";");
       out.println();
+      if(documentation != null)
+         out.println(comment(documentation));
       out.println("public interface " + javaIdentifier(name) + (extensions.size() > 0 ? " extends " + comma(extensions) : ""));
       out.println("{");
       for(Property property : properties)
       {
          String s = javaIdentifier(property.name);
+         if(property.comment != null)
+            out.println(property.comment);
          out.println("   " + property.type + " get" + s + "();");
          out.println("   void set" + s + "(" + property.type + " " + normalize(property.name) + ");");
       }
@@ -345,7 +383,7 @@ public class Generator
       System.out.println("Created " + source);
    }
 
-   private void generateInterface(String name, SimpleContent content) throws IOException
+   private void generateInterface(String name, String documentation, SimpleContent content) throws IOException
    {
       // hmm, duplicates logic in determineJavaType
 
@@ -366,6 +404,8 @@ public class Generator
 
          out.println("package " + packageName + ";");
          out.println();
+         if(documentation != null)
+            out.println(comment(documentation));
          out.println("public interface " + identifier);
          out.println("{");
          out.println("   String getValue();");
@@ -401,6 +441,8 @@ public class Generator
 
       out.println("package " + packageName + ";");
       out.println();
+      if(documentation != null)
+         out.println(comment(documentation));
       out.println("public enum " + identifier);
       out.println("{");
       for(Object element : restriction.getFacets())

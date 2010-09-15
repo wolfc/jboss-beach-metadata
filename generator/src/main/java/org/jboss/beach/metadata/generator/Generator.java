@@ -26,6 +26,7 @@ import org.jboss.beach.metadata.generator.xsd.Attribute;
 import org.jboss.beach.metadata.generator.xsd.ComplexType;
 import org.jboss.beach.metadata.generator.xsd.Documentation;
 import org.jboss.beach.metadata.generator.xsd.Element;
+import org.jboss.beach.metadata.generator.xsd.ExplicitGroup;
 import org.jboss.beach.metadata.generator.xsd.Facet;
 import org.jboss.beach.metadata.generator.xsd.Group;
 import org.jboss.beach.metadata.generator.xsd.GroupRef;
@@ -85,6 +86,7 @@ public class Generator
 
    private List<Schema> generateSchemas = new ArrayList<Schema>();
    private Map<String, Schema> knownSchemas = new HashMap<String, Schema>();
+   private Map<Schema, String> knownSchemaPackages = new HashMap<Schema, String>();
    
    public Generator(String packageName, File destDir) throws JAXBException
    {
@@ -114,13 +116,16 @@ public class Generator
       Schema schema = (Schema) unmarshaller.unmarshal(file);
       generateSchemas.add(schema);
       knownSchemas.put(xsdBaseName, schema);
+      knownSchemaPackages.put(schema, packageName);
       for(OpenAttrs attrs : schema.getIncludeOrImportOrRedefine())
       {
          if(attrs instanceof Include)
          {
             Include include = (Include) attrs;
             String location = include.getSchemaLocation();
-            knownSchemas.put(location, (Schema) unmarshaller.unmarshal(new File(dir, location)));
+            if(!knownSchemas.containsKey(location))
+               knownSchemas.put(location, (Schema) unmarshaller.unmarshal(new File(dir, location)));
+//            knownSchemaPackages.put(schema, packageName);
          }
       }
    }
@@ -160,7 +165,7 @@ public class Generator
       return r;
    }
 
-   private String determineJavaType(String name, SimpleContent content)
+   private String determineJavaType(Schema schema, String name, SimpleContent content)
    {
       if(content.getExtension() != null)
       {
@@ -170,7 +175,7 @@ public class Generator
             Attribute attr = (Attribute) content.getExtension().getAttributeOrAttributeGroup().get(0);
             if(attr.getName() != null && attr.getName().equals("id"))
                return determineJavaType(content.getExtension().getBase());
-            return packageName + "." + javaIdentifier(name);
+            return packageNamePrefix(schema) + javaIdentifier(name);
          }
          return determineJavaType(content.getExtension().getBase());
       }
@@ -178,7 +183,7 @@ public class Generator
       {
          SimpleRestrictionType restriction = content.getRestriction();
          if(restriction.getFacets().size() > 0 && !(restriction.getFacets().get(0) instanceof Pattern))
-            return packageName + "." + javaIdentifier(name);
+            return packageNamePrefix(schema) + javaIdentifier(name);
          return determineJavaType(content.getRestriction().getBase());
       }
    }
@@ -222,7 +227,7 @@ public class Generator
                NamedGroup group = (NamedGroup) attrs;
                if(!group.getName().equals(name.getLocalPart()))
                   continue;
-               return packageName + "." + javaIdentifier(group.getName());
+               return packageNamePrefix(schema) + javaIdentifier(group.getName());
             }
             else if(attrs instanceof ComplexType)
             {
@@ -231,12 +236,12 @@ public class Generator
                   continue;
                if(type.getSimpleContent() != null)
                {
-                  return determineJavaType(type.getName(), type.getSimpleContent());
+                  return determineJavaType(schema, type.getName(), type.getSimpleContent());
                }
                if(type.getSequence() != null)
                {
                   //generateInterface(schemas, type.getName(), type.getSequence());
-                  return packageName + "." + javaIdentifier(type.getName());
+                  return packageNamePrefix(schema)  + javaIdentifier(type.getName());
                }
                throw new RuntimeException("NYI " + name);
             }
@@ -274,7 +279,7 @@ public class Generator
             if(attrs instanceof NamedGroup)
             {
                NamedGroup group = (NamedGroup) attrs;
-               generateInterface(group.getName(), documentation(group), group);
+               generateInterface(group.getName(), documentation(group), (ExplicitGroup) ((JAXBElement) group.getParticle().get(0)).getValue());
             }
             else if(attrs instanceof TopLevelComplexType)
             {
@@ -317,10 +322,9 @@ public class Generator
       for(Object p : group.getParticle())
       {
          Object value = ((JAXBElement) p).getValue();
-         if(value instanceof Group)
+         if(value instanceof ExplicitGroup)
          {
-            Group g = (Group) value;
-            //System.out.println(g.getParticle());
+            ExplicitGroup g = (ExplicitGroup) value;
             for(Object p2 : g.getParticle())
             {
                Object v2 = ((JAXBElement) p2).getValue();
@@ -338,12 +342,19 @@ public class Generator
                {
                   GroupRef ref = (GroupRef) v2;
                   String type = determineJavaType(ref.getRef());
-                  assert type.startsWith(packageName) : type + " does not start with " + packageName + " " + name;
+                  //assert type.startsWith(packageName) : type + " does not start with " + packageName + " " + name;
                   extensions.add(type);
                }
                else
                   throw new IllegalStateException(v2.toString());
             }
+         }
+         else if(value instanceof GroupRef)
+         {
+            GroupRef ref = (GroupRef) value;
+            String type = determineJavaType(ref.getRef());
+            //assert type.startsWith(packageName) : type + " does not start with " + packageName + " " + name;
+            extensions.add(type);
          }
          else if(value instanceof Element)
          {
@@ -355,7 +366,7 @@ public class Generator
             properties.add(new Property(element.getName(), comment("   ", documentation(element)), type));
          }
          else
-            throw new IllegalStateException(value.toString());
+            throw new IllegalStateException(value.toString() + " on " + name);
       }
 
       String identifier = javaIdentifier(name);
@@ -375,6 +386,7 @@ public class Generator
             out.println(property.comment);
          out.println("   " + property.type + " get" + s + "();");
          out.println("   void set" + s + "(" + property.type + " " + normalize(property.name) + ");");
+         out.println();
       }
       out.println("}");
 
@@ -492,5 +504,15 @@ public class Generator
          result += Character.toUpperCase(token.charAt(0)) + token.substring(1);
       }
       return result;
-   }   
+   }
+
+   private String packageNamePrefix(Schema schema)
+   {
+      String pkg = knownSchemaPackages.get(schema);
+      if(pkg == null)
+         throw new IllegalStateException("No package name known for schema " + schema);
+      if(pkg.equals(packageName))
+         return "";
+      return pkg + ".";
+   }
 }

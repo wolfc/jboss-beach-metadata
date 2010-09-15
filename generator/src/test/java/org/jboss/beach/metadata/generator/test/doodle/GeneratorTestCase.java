@@ -33,6 +33,6 @@ public class GeneratorTestCase
    public void testGenerate() throws Exception
    {
       //Generator.generate("javaee/src/main/resources/javaee_web_services_client_1_3.xsd", "generator/target/generated-sources/generator", "org.jboss.beach.metadata.generator.test.javaee");
-      Generator.generate("target/generated-sources/generator", "org.jboss.beach.metadata.generator.test.javaee", "../javaee/src/main/resources/javaee_6.xsd", "../javaee/src/main/resources/javaee_web_services_client_1_3.xsd");
+      Generator.generate("target/generated-sources/generator", "org.jboss.beach.metadata.generator.test.javaee", "../javaee/src/main/resources/javaee_web_services_client_1_3.xsd", "../javaee/src/main/resources/javaee_6.xsd");
    }
 }
